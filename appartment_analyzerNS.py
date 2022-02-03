@@ -6,21 +6,21 @@ import matplotlib.pyplot as plt
 import sys
 
 def ns_group_scan_website(url):
-    print("Starting scaning the website...")
+    print("Starting scaning the website NS_group_nekretnine...")
 
     #open with GET method
     resp=requests.get(url)
       
     #http_respone 200 means OK status
     if resp.status_code==200:
-        print("Successfully opened the web page")
+        print("--> Successfully opened the web page")
       
         # we need a parser,Python built-in HTML parser is enough .
         soup=BeautifulSoup(resp.text,'html.parser')    
   
         # raw_result is data which contains all the text of all <p> from ns-group-nekretnine website
+        print("--> Reading the number of all aparments...")
         raw_result=soup.find("p",{"class":"total_results"})
-        print(raw_result)
 
         # extract important data from all <p>
         result_chunk_list = []
@@ -29,6 +29,46 @@ def ns_group_scan_website(url):
 
         # extract just the number of apartments on all Limans in Novi Sad on current date
         num_of_appar_data = result_chunk_list[1]
+
+        # adding every appartment to database
+        print("--> Adding every appartment to database")
+        raw_result=soup.findAll("a",{"class":"property_item_more"})
+        result_chunk_list = []
+        print(raw_result)
+        for i in raw_result:
+            result_chunk_list.append(str(i).split("\"")[3])
+
+        appar_cnt = 1
+        for n in result_chunk_list:
+            print("----> Reading appartment {} info".format(appar_cnt))
+
+            #open with GET method
+            url = "https://www.nekretnine-novisad.rs/" + n[2:]
+            resp=requests.get(url)
+
+
+            #http_respone 200 means OK status
+            if resp.status_code==200:
+
+                # we need a parser,Python built-in HTML parser is enough .
+                soup=BeautifulSoup(resp.text,'html.parser')    
+
+                print("--> Successfully opened the appartment info")
+                raw_result=soup.find("div",{"class":"property_details"})
+                for i in raw_result:
+                    print(i.text)
+                sys.exit(1)
+
+            else:
+                print("Error")
+                return 0
+                
+            appar_cnt = appar_cnt + 1
+            
+
+
+
+
         return num_of_appar_data
     else:
         print("Error")
@@ -37,21 +77,20 @@ def ns_group_scan_website(url):
 
 
 def oglasi_rs_scan_website(url):
-    print("Starting scaning the website...")
+    print("Starting scaning the website oglasi.rs ...")
 
     #open with GET method
     resp=requests.get(url)
       
     #http_respone 200 means OK status
     if resp.status_code==200:
-        print("Successfully opened the web page")
+        print("--> Successfully opened the web page")
       
         # we need a parser,Python built-in HTML parser is enough .
         soup=BeautifulSoup(resp.text,'html.parser')    
   
         # raw_result is data which contains all the text of all <p> from ns-group-nekretnine website
         raw_result=soup.find("div",{"class":"panel panel-default"})
-        print(raw_result)
 
         # extract important data from all <p>
         result_chunk_list = []
@@ -59,11 +98,12 @@ def oglasi_rs_scan_website(url):
             result_chunk_list.append(i.text)
 
         result_chunk_list = result_chunk_list[0].split("\n")
-        print("final:")
         result_chunk_list = result_chunk_list[1].replace(" ","")
 
         # extract just the number of apartments on all Limans in Novi Sad on current date
         num_of_appar_data, tail = result_chunk_list.split("oglasa")
+
+
 
         return num_of_appar_data
     else:
@@ -90,11 +130,10 @@ def connect_to_db():
 
 
     # check if table exists
-    #listOfTables = cursor.execute("""SELECT tableName FROM sqlite_master WHERE type='table' AND tableName='APPARTMENTS'; """).fetchall()
     cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='APPARTMENTS' ''')
 
     if cursor.fetchone()[0] == 0:
-        print('Creating appartment_analyzerNS database...')
+        print('--> Creating appartment_analyzerNS database...')
 
 
         # Creating table
@@ -107,7 +146,7 @@ def connect_to_db():
         # Closing the connection
         conn.close()
     else:
-        print('appartment_analyzerNS database exists! Database connecting...')
+        print('--> appartment_analyzerNS database exists! Database connecting...')
 
 
     
@@ -118,10 +157,18 @@ def db_store_data(website, city_loc, num_of_appar, date):
 
     # Creating a cursor object using the cursor() method
     cursor = conn.cursor()
+
+    # check if entry for current date exist. If that is true, do not enter new value into database
+    entry_exist = False
+    dates_list = cursor.execute("SELECT DATE FROM APPARTMENTS")
+    for row in dates_list:
+        if date == row[0]:
+            entry_exist = True
   
     # Queries to INSERT records.
-    cursor.execute("INSERT INTO APPARTMENTS (WEBSITE, CITY_LOC, NUM_OF_APPAR, DATE) VALUES (?, ?, ?, ?)",\
-                   (website, city_loc, num_of_appar, date))
+    if not entry_exist:
+        cursor.execute("INSERT INTO APPARTMENTS (WEBSITE, CITY_LOC, NUM_OF_APPAR, DATE) VALUES (?, ?, ?, ?)",\
+                       (website, city_loc, num_of_appar, date))
 
     # Commit your changes in the database    
     conn.commit()
@@ -137,53 +184,29 @@ def make_graph():
     # Creating a cursor object using the cursor() method
     cursor = conn.cursor()
 
-    # Display data inserted
-    print("Data Inserted in the table: ")
-    tabel_data = cursor.execute('''SELECT * FROM APPARTMENTS''')
-    for row in tabel_data:
-        print(row)
+    # extract num of appartments for ns_group_nekretnine website
+    ns_group_data_appar_num = cursor.execute(''' SELECT NUM_OF_APPAR FROM APPARTMENTS WHERE WEBSITE = "NS_group_nekretnine" ''')
 
+    # parsing num_of_appr extracted data for ns_group_nekretnine
+    ns_group_data_appar_num_list = []
+    ns_group_data_dates_list = []
+    print("TEST TEST:")
+    for row in ns_group_data_appar_num:
+        ns_group_data_appar_num_list.append(int(row[0]))
 
-    tabel_data_list = []
-    tabel_data = cursor.execute('''SELECT * FROM APPARTMENTS''')
-    for element in tabel_data:
-        tabel_data_list.append(list(element))
+    # extract dates for ns_group_nekretnine website that are in connection with num of appartments of the same website
+    ns_group_data_dates     = cursor.execute(''' SELECT DATE FROM APPARTMENTS WHERE WEBSITE = "NS_group_nekretnine" ''')
 
-    ns_group_data_list = []
-    oglasi_rs_data_list = []
-    for element in tabel_data_list:
-        if element[0] == "NS_group_nekretnine":
-            ns_group_data_list.append(element)
-            
-        if element[0] == "oglasi.rs":
-            oglasi_rs_data_list.append(element)
-
-    print("HEEELOEE")
-    for x in oglasi_rs_data_list:
-        print(x)
-
+    # parsing dates extracted data for ns_group_nekretnine
+    for row in ns_group_data_dates:
+        ns_group_data_dates_list.append((row[0]))
         
+    print(ns_group_data_dates_list)
 
+    # assigning value for plot axis
+    ns_group_date_axis_graph      = ns_group_data_dates_list
+    ns_group_appar_num_axis_graph = ns_group_data_appar_num_list
 
-
-    ns_group_date_axis_graph = []
-    ns_group_appar_num_axis_graph =  []
-    for element in ns_group_data_list:
-        ns_group_appar_num_axis_graph.append(element[2])
-        ns_group_date_axis_graph.append(element[3])
-
-    oglasi_rs_date_axis_graph = []
-    oglasi_rs_appar_num_axis_graph =  []
-    for element in oglasi_rs_data_list:
-        oglasi_rs_appar_num_axis_graph.append(element[2])
-        oglasi_rs_date_axis_graph.append(element[3])
-
-    
-    print("HEEELOEE")
-    for x in oglasi_rs_date_axis_graph:
-        print(x)
-    for x in oglasi_rs_appar_num_axis_graph:
-        print(x)
 
     # plotting the points
     plt.plot(ns_group_date_axis_graph, ns_group_appar_num_axis_graph, label = "ns_group_nekretnine")
@@ -210,8 +233,7 @@ def make_graph():
 date = get_date()
 
 # ns-group nekretnine
-ns_group_nekretnine_url = "https://www.nekretnine-novisad.rs/nekretnine/stan.php?str=2&sort=datum&filter=city\
-:67|area:170,171,169,168|type:stan&l="
+ns_group_nekretnine_url = "https://www.nekretnine-novisad.rs/nekretnine/stan.php?str=1&sort=datum&filter=city\:67|area:170,171,169,168|type:stan&l="
 appartmant_number = ns_group_scan_website(ns_group_nekretnine_url)
 connect_to_db()
 db_store_data("NS_group_nekretnine", "Limans", appartmant_number, date)
