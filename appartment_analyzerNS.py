@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import sys
 
 import aans.functions as aans
 
@@ -107,13 +106,6 @@ def oglasi_rs_scan_website(url):
     else:
         print("Error")
         return 0
-
-
-
-
-
-
-
 
 
 # extract date as dd_mm_yyyy string
